@@ -25,7 +25,7 @@ class Author(Base):
      __tablename__ = "table_author"
      id: Mapped[int] = mapped_column(Integer, primary_key=True)
      name:Mapped[str]=mapped_column(String(120),nullable=False)
-     age: Mapped[str] = mapped_column(Integer)
+     age: Mapped[int] = mapped_column(Integer)
      country: Mapped[str] = mapped_column(String(120))
 
 class Book(Base):
