@@ -3,6 +3,7 @@ from sqlalchemy.orm import DeclarativeBase
 from typing import AsyncGenerator,Annotated
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from decouple import config
+from fastapi import Depends
 
 
 DB_USER = config("DB_USER")
@@ -25,3 +26,4 @@ async  def create_tables():
 async def get_session() -> AsyncGenerator[AsyncSession,None]:
     async  with async_session() as session:
         yield session
+SessionDep = Annotated[AsyncSession, Depends(get_session)]

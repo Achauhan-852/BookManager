@@ -1,5 +1,6 @@
+from datetime import datetime
 from app.db.config import Base
-from sqlalchemy import String, Integer, ForeignKey
+from sqlalchemy import (String, Integer, ForeignKey,DATETIME,Boolean)
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -9,7 +10,12 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     phone: Mapped[str] = mapped_column(String(20), nullable=False)
-    password: Mapped[str] = mapped_column(String(255), nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active:Mapped[bool]=mapped_column(Boolean,default=True)
+    is_admin:Mapped[bool]=mapped_column(Boolean,default=False)
+    is_verified:Mapped[bool]=mapped_column(Boolean,default=False)
+    created_at:Mapped[datetime]=mapped_column(DATETIME,default=datetime.utcnow)
+    updated_at:Mapped[datetime]=mapped_column(DATETIME,default=datetime.utcnow,onupdate=datetime.utcnow)
 
 class Login(Base):
     __tablename__ = "table_login"

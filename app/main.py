@@ -1,59 +1,60 @@
+from datetime import datetime, timedelta,timezone
 print(" THIS MAIN.PY IS LOADED ")
 from contextlib import asynccontextmanager
-from fastapi import FastAPI,Depends
-from pydantic import BaseModel,EmailStr
+from fastapi import FastAPI,Depends,Request,Response,middleware
 from app.db.config import create_tables,get_session
 from app.account.services import *
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.schemas.user import *
+from app.auth_dependency import get_current_user
+from app.auth_utils import decode_access_token
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await create_tables()
     yield
 app = FastAPI(lifespan=lifespan)
-class SignupPydantic(BaseModel):
-    name:str
-    email:EmailStr
-    phone:str
-    password:str
-class LoginPydantic(BaseModel):
-    email:EmailStr
-    password:str
 
-class CategoryPydantic(BaseModel):
-    cat_name:str
-
-class AuthorPydantic(BaseModel):
-    name:str
-    age:int
-    country:str
-
-class BookPydantic(BaseModel):
-    title: str
-    author_id: int
-    category_id: int
-    amz_url: str | None = None
-class CategoryUpdatePydantic(BaseModel):
-    cat_name: str
-class AuthorUpdatePydantic(BaseModel):
-    name: str
-    age:int
-    country:str
-class BookUpdatePydantic(BaseModel):
-    title: str
-    amz_url:int
-
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    token = request.headers.get("Authorization")
+    if not token:
+        raise HTTPException(status_code=401, detail="Access Denied: Token Missing")
+    if token.startswith("Bearer "):
+        token = token.replace("Bearer ", "")
+    try:
+        payload = decode_access_token(token)
+    except:
+        raise HTTPException(status_code=401, detail="Access Denied: Invalid Token")
+    exp_ts = payload.get("exp")
+    exp_time = datetime.fromtimestamp(exp_ts, tz=timezone.utc)
+    if datetime.now(timezone.utc) > exp_time:
+        raise HTTPException(status_code=401, detail="Access Denied: Token Expired")
+    if datetime.now(timezone.utc) > exp_time + timedelta(seconds=30):
+        raise HTTPException(status_code=401, detail="Access Denied: Token Grace Expired")
+    return await call_next(request)
 
 @app.post("/bm/signup",tags=["Login/Signup"])
 async def signup(data:SignupPydantic,session:AsyncSession=Depends(get_session)):
-    user=await sign_up_user(session,data.name,data.email,data.phone,data.password)
-    return {"message":"Signup Successful","User__id":user.id}
-
+    await sign_up_user(session,data.name,data.email,data.phone,data.password)
+    return {"message":"Signup Successful","User__email":data.email}
 @app.post("/bm/login",tags=["Login/Signup"])
 async def login(data:LoginPydantic,session:AsyncSession=Depends(get_session)):
-    user=await login_user(session,data.email,data.password)
-    if not user:
-        raise HTTPException(status_code=450,detail="Invalid email or password")
-    return {"message":"Login Successful","user_id":user.id}
+    token = await login_user(session,data.email,data.password)
+    if not token:
+        raise HTTPException(status_code=401,detail="Invalid email or password")
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
+@app.get("/bm/me")
+async def me(current_user = Depends(get_current_user)):
+    return {
+        "user_id": current_user.id,
+        "email": current_user.email
+    }
+
+
 
 @app.post("/bm/category",tags=["Category"])
 async def add_category(data:CategoryPydantic,session:AsyncSession=Depends(get_session)):
@@ -63,9 +64,9 @@ async def add_category(data:CategoryPydantic,session:AsyncSession=Depends(get_se
 async def get_category_list(session:AsyncSession=Depends(get_session)):
     list_cat=await get_all_category_list(session)
     return list_cat
-@app.post("/bm/{category_id}",tags=["Category"])
+@app.get("/bm/{category_id}",tags=["Category"])
 async def category_get_by_id(category_id:int,session:AsyncSession=Depends(get_session)):
-    category =await get_author_by_id(session,category_id)
+    category =await get_category_by_id(session,category_id)
     return category
 @app.put("/bm/category/{category_id}", tags=["Category"])
 async def update_category(category_id: int,data: CategoryUpdatePydantic,session: AsyncSession = Depends(get_session)):
@@ -103,12 +104,8 @@ async def add_book(data:BookPydantic,session:AsyncSession=Depends(get_session)):
     return {"message":"Book added","book_id":book.id}
 @app.get("/bm/list_book/",tags=["Book"])
 async def get_book_list(session:AsyncSession=Depends(get_session)):
-    list_book=await get_all_author_list(session)
+    list_book = await get_all_book_list(session)
     return list_book
-@app.post("/bm/{book_id}",tags=["Book"])
-async def category_get_by_id(book_id:int,session:AsyncSession=Depends(get_session)):
-    book =await get_book_by_id(session,book_id)
-    return book
 @app.post("/bm/{book_id}",tags=["Book"])
 async def book_get_by_id(book_id:int,session:AsyncSession=Depends(get_session)):
     book =await get_book_by_id(session,book_id)

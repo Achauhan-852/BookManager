@@ -1,23 +1,51 @@
+import logging
 from fastapi import HTTPException
 from app.account.models import User,Login,Category,Author,Book
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from app.account.utils import hash_password,verify_password
+from app.auth_utils import create_access_token
+
+logging.basicConfig(level=logging.INFO,format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 async def sign_up_user(session:AsyncSession,name:str,email:str,phone:str,password:str):
-    user=User(name=name,email=email,phone=phone,password=password)
+    logger.info(f"Signup attempt: email={email}")
+    if name == "":
+        logger.warning("Signup failed: name blank")
+        raise HTTPException(status_code=400, detail="Name cannot be blank")
+    result_name = await session.execute(select(User).where(User.name == name))
+    name_user = result_name.scalar_one_or_none()
+    if name_user:
+        logger.warning(f"Signup failed: name exists ({name})")
+        raise HTTPException(status_code=400, detail="Name Already Registered")
+    result_email = await session.execute(select(User).where(User.email == email))
+    existing_user=result_email.scalar_one_or_none()
+    if existing_user:
+        logger.warning(f"Signup failed: email exists ({email})")
+        raise HTTPException(status_code=400,detail="Email Already Registered")
+    hashed=hash_password(password)
+    user=User(name=name,email=email,phone=phone,hashed_password=hashed)
     session.add(user)
     await  session.commit()
     await session.refresh(user)
+    logger.info(f"Signup success: user_id={user.id}")
     return user
+
 async def login_user(session:AsyncSession,email:str,password:str):
-    result=await session.execute(select(User).where(User.email==email,User.password==password))
-    user=result.scalar_one_or_none()
+    logger.info(f"Login attempt: email={email}")
+    result = await session.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
     if not user:
+        logger.warning(f"Login failed: email not found ({email})")
         return None
-    login_data=Login(user_id=user.id)
-    session.add(login_data)
-    await session.commit()
-    return user
+    if not verify_password(password, user.hashed_password):
+        logger.warning(f"Login failed: wrong password ({email})")
+        return None
+    token = create_access_token(user.id)
+    logger.info(f"Login success: user_id={user.id}, email={email}")
+    return token
+
 
 
 async def create_category(session:AsyncSession,cat_name:str):
