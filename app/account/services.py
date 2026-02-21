@@ -92,7 +92,7 @@ async def get_author_by_id(session:AsyncSession,id:int):
         raise HTTPException(status_code=1001,detail="Author not found")
     return result
 async def author_update(session:AsyncSession,id:int,name:str,age:int,country:str):
-    author=session.get(Author,id)
+    author=await session.get(Author,id)
     if not author:
         raise HTTPException(status_code=602,detail="Author not found for update")
     author.name=name

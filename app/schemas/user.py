@@ -29,4 +29,4 @@ class AuthorUpdatePydantic(BaseModel):
     country:str
 class BookUpdatePydantic(BaseModel):
     title: str
-    amz_url:int
+    amz_url:str
